@@ -63,8 +63,8 @@ class ReachGoal:
                 break
 
             command = Twist()
-            command.linear.x = 0.05 * self._set_linear_speed()
-            command.angular.z = 0.05 * self._set_angular_speed()
+            command.linear.x = 1 * self._set_linear_speed()
+            command.angular.z = 1 * self._set_angular_speed()
             self.pub.publish(command)
 
             self.feedback.x_status = self.xp
