@@ -26,6 +26,8 @@ class ReachGoal:
         self.distance_int = 0
         self.feedback = ReachTheGoalFeedback()
         self.result = ReachTheGoalResult()
+        self.command = Twist()
+        self.yaw_diff = 0
 
         self.kp_l = 1
         self.kd_l = 0.1
@@ -56,26 +58,47 @@ class ReachGoal:
         self.x_goal = req.x_goal
         self.y_goal = req.y_goal
         self.chase_distance = math.sqrt((self.xp - self.x_goal) ** 2 + (self.yp - self.y_goal) ** 2)
-        while self.chase_distance >= 0.3:
+        self.rotate()
+        self.move_to()
+
+        #self.result.success = True
+        if self.result.success:
+            print('Goal reached')
+            self.a_server.set_succeeded(self.result)
+
+    def rotate(self):
+        target_rad = math.atan2(self.y_goal - self.yp, self.x_goal - self.xp)
+        self.yaw_diff = target_rad - self.yaw
+        while self.yaw_diff > 0.01 or self.yaw_diff < -0.01:
             if self.a_server.is_preempt_requested():
                 self.result.success = False
                 self.a_server.set_preempted()
                 break
-
-            command = Twist()
-            command.linear.x = 0.05 * self._set_linear_speed()
-            command.angular.z = 0.05 * self._set_angular_speed()
-            self.pub.publish(command)
+            self.command.angular.z = self._set_angular_speed()
+            self.command.linear.x = 0.0
+            self.pub.publish(self.command)
 
             self.feedback.x_status = self.xp
             self.feedback.y_status = self.yp
             self.a_server.publish_feedback(self.feedback)
             self.r.sleep()
 
-        #self.result.success = True
-        if self.result.success:
-            print('Goal reached')
-            self.a_server.set_succeeded(self.result)
+    def move_to(self):
+        self.chase_distance = math.sqrt((self.xp - self.x_goal) ** 2 + (self.yp - self.y_goal) ** 2)
+        while self.chase_distance > 0.07:
+            if self.a_server.is_preempt_requested():
+                self.result.success = False
+                self.a_server.set_preempted()
+                break
+            self.command.linear.x = self._set_linear_speed()
+            # self.command.linear.x = 5
+            self.command.angular.z = 0.0
+            self.pub.publish(self.command)
+
+            self.feedback.x_status = self.xp
+            self.feedback.y_status = self.yp
+            self.a_server.publish_feedback(self.feedback)
+            self.r.sleep()
 
     def _set_linear_speed(self):
         self.chase_distance = math.sqrt((self.xp - self.x_goal) ** 2 + (self.yp - self.y_goal) ** 2)
