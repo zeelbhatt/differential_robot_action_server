@@ -15,10 +15,14 @@ class ReachGoal:
         self.xp = None
         self.yp = None
         self.theta = None
+        self.line_vel = None
+        self.ang_vel = None
+
         self.x_goal = None
         self.y_goal = None
         self.r = rospy.Rate(100)
         self.chase_distance = None
+        self.mission_call = None
         self.distance_int = 0
         self.feedback = ReachTheGoalFeedback()
         self.result = ReachTheGoalResult()
@@ -35,7 +39,6 @@ class ReachGoal:
 
     def _init_sub_pub(self):
         rospy.Subscriber('/turtle1/pose', Pose, self._turtle_cb)
-        rospy.Subscriber('/goal', PoseStamped, self._goal_cb)
         self.pub = rospy.Publisher('/turtle1/cmd_vel', Twist, queue_size=1)
         self.a_server = actionlib.SimpleActionServer("ReachGoalServer", ReachTheGoalAction, execute_cb=self._execute_cb,
                                                      auto_start=False)
@@ -48,45 +51,30 @@ class ReachGoal:
         self.line_vel = req.linear_velocity
         self.ang_vel = req.angular_velocity
 
-    def _goal_cb(self, req):
-        self.x_goal = req.pose.position.x
-        self.y_goal = req.pose.position.y
-        print('Goal set to ', self.x_goal, self.y_goal)
-
     def _execute_cb(self, req):
-        success = True
-        if req.call_mission is True and self.x_goal is not None:
-            print('Check 1')
-            self.chase_distance = math.sqrt((self.xp - self.x_goal) ** 2 + (self.yp - self.y_goal) ** 2)
-            while self.chase_distance >= 0.3:
-                if self.a_server.is_preempt_requested():
-                    success = False
-                    break
-                command = Twist()
-                command.linear.x = 0.01 * self._set_linear_speed()
-                command.angular.z = 0.01 * self._set_angular_speed()
-                self.pub.publish(command)
+        self.result.success = True
+        self.x_goal = req.x_goal
+        self.y_goal = req.y_goal
+        self.chase_distance = math.sqrt((self.xp - self.x_goal) ** 2 + (self.yp - self.y_goal) ** 2)
+        while self.chase_distance >= 0.3:
+            if self.a_server.is_preempt_requested():
+                self.result.success = False
+                self.a_server.set_preempted()
+                break
 
-                self.feedback.x_status = self.xp
-                self.feedback.y_status = self.yp
-                self.a_server.publish_feedback(self.feedback)
-
-                self.r.sleep()
-            self.result.success = True
-            self.result.message = "Bot reached to goal"
-
-            if success:
-                self.a_server.set_succeeded(self.result)
-
-        elif req.call_mission is False:
             command = Twist()
-            command.linear.x = 0
-            command.angular.z = 0
+            command.linear.x = 0.05 * self._set_linear_speed()
+            command.angular.z = 0.05 * self._set_angular_speed()
             self.pub.publish(command)
 
-            self.result.success = True
-            self.result.message = "Bot Stopped"
+            self.feedback.x_status = self.xp
+            self.feedback.y_status = self.yp
+            self.a_server.publish_feedback(self.feedback)
+            self.r.sleep()
 
+        #self.result.success = True
+        if self.result.success:
+            print('Goal reached')
             self.a_server.set_succeeded(self.result)
 
     def _set_linear_speed(self):
